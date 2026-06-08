@@ -405,7 +405,7 @@ Thread t = new Thread() {
 - **不可变性**：String 的值存储在 `byte[]` 中（JDK 9+，之前为 `char[]`），用 `final` 修饰，修改会创建新对象
 - **字符串常量池**：字面量创建的字符串存储在常量池中，相同字符串共享引用
 - `==` vs `equals()`：`==` 比较地址，`equals()` 比较内容
-- `intern()` 方法：将字符串放入常量池并返回引用
+- `intern()` 方法：将字符串放入常量池并返回引用。JDK 7+ 常量池移至堆中，`intern()` 不再复制对象，仅在池中记录引用，若池中已有则返回已有引用
 - **PS**：
   - `String s = "abc";` 会在池中创建；`new String("abc")` 可能创建两个对象（池中一个 + 堆中一个）
   - 循环拼接应避免用 `+`，因为它会被编译为 `new StringBuilder().append()`，但仍可能生成大量临时对象
@@ -525,7 +525,7 @@ map.forEach((k, v) -> System.out.println(k + "=" + v));
 
 ### 8.6 TreeSet / TreeMap
 - 基于红黑树实现，元素自然排序或传入 `Comparator`
-- 要求元素可比较
+- 要求元素可比较（实现 `Comparable` 或传入 `Comparator`）
 
 ### 8.7 LinkedHashMap
 - 在 `HashMap` 上增加了双向链表维护插入或访问顺序
@@ -704,6 +704,9 @@ list2.add(1);  // ✓
 - **线程**：CPU 调度的基本单位，一个进程包含多个线程
 - **主线程**：`main()` 方法所在的线程
 - **线程状态**：NEW → RUNNABLE → BLOCKED / WAITING / TIMED_WAITING → TERMINATED
+  - **BLOCKED**：等待获取监视器锁（如 `synchronized`），线程被阻塞在锁上
+  - **WAITING**：等待其他线程唤醒（如 `wait()`、`LockSupport.park()`），无限期等待
+  - **TIMED_WAITING**：限时等待（如 `sleep(time)`、`wait(time)`），到时间自动恢复
 
 ### 12.2 创建线程的三种方式
 
@@ -759,6 +762,11 @@ String result = futureTask.get();  // 阻塞获取结果
   - `notify()` 唤醒等待线程；`notifyAll()` 唤醒全部
   - 必须在循环中检查条件，防止虚假唤醒
 - **死锁**：多线程互相持有对方所需资源，需避免嵌套锁
+
+#### 线程控制方法
+- **join()**：等待该线程执行完毕。如 `t.join()` 使当前线程阻塞直到 t 结束
+- **yield()**：提示调度器当前线程愿意让出 CPU，但调度器可以忽略
+- **setDaemon(true)**：设置为守护线程。当所有非守护线程结束时，JVM 会退出，守护线程自动终止。常用于后台服务（如垃圾回收线程）
 
 #### 线程池（JDK 5+）
 - 使用 `Executors` 工厂方法或 `ThreadPoolExecutor` 手动创建（推荐）
@@ -817,6 +825,8 @@ executor.shutdown();
 
 ### 14.1 八种基本类型
 - `byte`(1字节)、`short`(2)、`int`(4)、`long`(8)、`float`(4)、`double`(8)、`char`(2, Unicode)、`boolean`(JVM 相关)
+- **成员变量（全局）有默认值**：`int`→0，`boolean`→false，`char`→'\u0000'（空字符），引用类型→null。局部变量必须显式初始化，否则编译报错
+- **数组元素也有默认值**：与成员变量一致
 
 ### 14.2 包装类
 `Byte`、`Short`、`Integer`、`Long`、`Float`、`Double`、`Character`、`Boolean`，均不可变，提供 `parseXxx`、`valueOf` 等工具方法。
@@ -848,7 +858,7 @@ public enum Season { SPRING, SUMMER, AUTUMN, WINTER }
 
 ### 15.3 深入能力
 - 可定义字段、构造方法（必须私有）、方法，甚至实现接口
-- **枚举实现单例**：《Effective Java》推荐，无偿提供序列化、反射安全、线程安全，写法极简
+- **枚举实现单例**：《Effective Java》推荐，无偿提供序列化安全（枚举序列化机制特殊，不会生成新实例）、反射安全、线程安全，写法极简
 
 ```java
 public enum Singleton { 
@@ -856,7 +866,6 @@ public enum Singleton {
     public void doSomething() {} 
 }
 ```
-
 - `EnumSet` 和 `EnumMap` 是专门的高效集合实现
 
 ---
@@ -897,7 +906,7 @@ public enum Singleton {
 - `getDeclaredField(字段名)` 获取字段，`setAccessible(true)` 突破私有权限，使用 `set/get` 读写值
 
 ### 17.4 深入关注
-- `setAccessible(true)` 会关闭访问检查，但若模块或安全管理器限制仍可能失败
+- `setAccessible(true)` 会关闭访问检查，但在 JDK 9+ 模块化系统下，若目标模块未通过 `module-info` 开放包，或命令行未添加 `--add-opens`，仍可能抛出 `InaccessibleObjectException`
 - 反射有性能损耗，频繁调用应缓存 Method 对象或使用高性能替代方案（如 `MethodHandle`）
 - 反射是 Spring、MyBatis 等框架的基石，但过度使用会破坏封装性
 
@@ -956,7 +965,7 @@ Runnable r = () -> System.out.println("Hello Lambda");
 
 ### 19.5 深入
 - 惰性求值意味着没有终端操作就不会执行
-- `parallelStream` 使用 ForkJoinPool，注意线程安全与性能陷阱（数据量小、有状态操作时不建议并行）
+- `parallelStream` 默认使用 `ForkJoinPool.commonPool()`（线程数 = CPU 核心数 - 1），若池被其他任务占满，并行流可能被阻塞。数据量小、有状态操作时不建议并行；需要自定义线程池时，可通过 `ForkJoinPool` 包装执行
 
 ---
 
@@ -980,19 +989,94 @@ Runnable r = () -> System.out.println("Hello Lambda");
 ### 20.4 操作
 使用 `plusDays/minusMonths` 等方法创建新实例，实现时间计算。`TemporalAdjusters` 提供常用调节器（如当月第一天）。
 
+### 20.5 新旧 API 互转
+- `Date ↔ Instant`：`date.toInstant()`、`Date.from(instant)`
+- `Calendar ↔ ZonedDateTime`：`calendar.toInstant().atZone(ZoneId.systemDefault())`
+- **SimpleDateFormat 线程不安全**：多个线程共享同一个 `SimpleDateFormat` 实例会导致数据混乱，需使用 `ThreadLocal` 或改用线程安全的 `DateTimeFormatter`
+
 ---
 
 ## 21. 其他重要零碎基础
 
-### 21.1 数组与 Arrays 工具类
+### 21.1 main 方法
+`public static void main(String[] args)` 是 Java 程序的标准入口：
+- `public`：JVM 需要从外部调用，必须公开
+- `static`：JVM 调用时无需创建对象实例
+- `void`：程序入口不需要返回值给 JVM
+- `String[] args`：接收命令行传入的参数，如 `java MyApp arg1 arg2`，args 即为 `["arg1", "arg2"]`
+
+```java
+public class MainDemo {
+    public static void main(String[] args) {
+        for (String arg : args) {
+            System.out.println("参数：" + arg);
+        }
+    }
+}
+```
+
+### 21.2 代码块
+- **静态代码块**：`static {}`，类加载时执行一次，用于初始化静态资源
+- **实例代码块**：`{}`，每次创建对象时执行，在构造方法之前执行，常用于提取多个构造方法共有的初始化逻辑
+
+```java
+public class BlockDemo {
+    static {
+        System.out.println("静态代码块：类加载时执行");
+    }
+    {
+        System.out.println("实例代码块：构造方法前执行");
+    }
+    public BlockDemo() {
+        System.out.println("构造方法执行");
+    }
+}
+```
+
+### 21.3 Comparable / Comparator
+- **Comparable<T>**：内比较器，类实现 `compareTo(T o)` 方法定义自然排序。如 `String`、`Integer` 已内置实现
+- **Comparator<T>**：外比较器，独立实现比较逻辑，可灵活定制排序规则，不修改原类
+
+```java
+// Comparable：类自身实现
+public class Student implements Comparable<Student> {
+    private int score;
+    @Override
+    public int compareTo(Student o) {
+        return this.score - o.score;  // 升序
+    }
+}
+
+// Comparator：外部定义
+Comparator<Student> byName = Comparator.comparing(Student::getName);
+Collections.sort(list, byName);  // 或 list.sort(byName)
+```
+
+### 21.4 Queue / Deque 实现类
+- **ArrayDeque**：基于循环数组实现的双端队列，比 `LinkedList` 做栈/队列更高效（无节点对象开销），是日常首选
+- **PriorityQueue**：基于堆结构实现，元素按优先级出队，默认自然排序或传入 `Comparator`
+
+```java
+Deque<String> stack = new ArrayDeque<>();  // 栈：push/pop
+Deque<String> queue = new ArrayDeque<>();  // 队列：offer/poll
+
+PriorityQueue<Integer> pq = new PriorityQueue<>();  // 小顶堆
+pq.offer(5); pq.offer(1); pq.offer(3);
+System.out.println(pq.poll());  // 1（最小优先）
+```
+
+### 21.5 数组与 Arrays 工具类
 - 数组初始化：`int[] arr = {1,2};` 或 `new int[5]`。多维数组实质为数组的数组
 - `Arrays.sort(arr)`：排序；`Arrays.binarySearch(arr, key)`：二分查找（需先排序）
 - `Arrays.asList(T... a)`：注意返回的 `List` 是固定大小的，**不支持 `add/remove`**，但可修改元素。若要可变，可 `new ArrayList<>(Arrays.asList(...))`
+- `Arrays.copyOf(arr, newLength)`：复制数组并指定新长度
+- `System.arraycopy(src, srcPos, dest, destPos, length)`：native 方法，高效数组复制，底层可能使用内存拷贝指令
+- `Arrays.fill(arr, value)`：将数组所有元素填充为指定值
 
-### 21.2 可变参数 (varargs)
+### 21.6 可变参数 (varargs)
 - 语法：`void method(String... args) {}`，内部当作数组，调用时可传任意数量实参
 - 规则：一个方法只能有一个可变参数，且放在参数列表最后。重载时注意优先匹配固定参数方法
 
-### 21.3 try-with-resources
+### 21.7 try-with-resources
 - 资源自动关闭：实现了 `AutoCloseable` 接口的对象（如流、连接）可在 `try(资源声明)` 结束后自动调用 `close()`，即使发生异常
 - **异常屏蔽**：若 finally 和 catch 都抛异常，try-with-resources 会优先暴露原始异常，关闭时的异常会被压制（suppressed），可通过 `Throwable.getSuppressed()` 获取
