@@ -154,7 +154,7 @@
 | [Tomcat 架构](中间件源码剖析手册.md#3-tomcat-源码剖析) | Connector、Container、类加载隔离 | ⭐⭐⭐⭐ |
 | [Netty 核心](中间件源码剖析手册.md#4-netty-源码剖析) | Reactor、Pipeline、ByteBuf、内存池 | ⭐⭐⭐⭐⭐ |
 | [Dubbo SPI](中间件源码剖析手册.md#5-其他中间件选读) | 自适应扩展、服务暴露与引用 | ⭐⭐⭐⭐ |
-| [Spring Boot 自动装配](中间件源码剖析手册.md#5.5-Spring-Boot-自动装配原理) | @EnableAutoConfiguration、spring.factories | ⭐⭐⭐⭐⭐ |
+| [Spring Boot 自动装配](中间件源码剖析手册.md#5-其他中间件选读) | @EnableAutoConfiguration、spring.factories | ⭐⭐⭐⭐⭐ |
 
 ---
 
